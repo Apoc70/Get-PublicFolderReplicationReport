@@ -73,6 +73,11 @@ param(
 # TST 2015-05-26 : measure script execution
 $stopWatch = [system.diagnostics.stopwatch]::startNew() 
 
+$ScriptDir = Split-Path $script:MyInvocation.MyCommand.Path
+
+$DateStamp = Get-Date -Format "yyyy-MM-dd"
+
+
 # Validate parameters
 if ($SendEmail)
 {
@@ -126,14 +131,14 @@ if ($Recurse)
     $srvCount = 1
     foreach($srv in $ComputerName)
     {
-        $activity = "Fetching Public Folder Data"
+        $activity = "1: Fetching Public Folder Data"
         $status = "Working on server $($srv)"
         
         Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
-    
-        foreach($f in $FolderPath)
-        {
-            Get-PublicFolder $f -Recurse | ForEach-Object { if ($newFolderPath -inotcontains $_.Identity) { $newFolderPath += $_.Identity } }
+        
+        foreach($f in $FolderPath) {
+            # ResultSize Unlimited added
+            Get-PublicFolder $f -Recurse -ResultSize Unlimited | ForEach-Object { if ($newFolderPath -inotcontains $_.Identity) { $newFolderPath += $_.Identity } }
         }
         $srvCount++
     }
@@ -151,18 +156,31 @@ $srvCount = 1
 foreach($server in $ComputerName)
 { 
     $pfOnServer = $null
+    
+    $server = $server.ToUpper()
 
-    $activity = "Fetching full public folder statistics"
+    $activity = "2: Fetching full public folder statistics"
     $status = "Working on server $($server)"
         
     Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
+
+    $FileName = "$($DateStamp)-PF-Stats-$($server).xml"
+    $File = Join-Path -Path $ScriptDir -ChildPath $FileName
     
-    $pfOnServer = Get-PublicFolderStatistics -Server $server -ResultSize Unlimited -ErrorAction SilentlyContinue
-    $pfOnServer.FolderPath
-    if ($FolderPath.Count -gt 0)
-    {
+    if(Test-Path -Path $File) {
+        Write-Progress -Activity $activity -Status "Load stats file $($FileName)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
+        $pfOnServer = Import-CliXml -Path $File
+    }
+    else {
+        Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
+        $pfOnServer = Get-PublicFolderStatistics -Server $server -ResultSize Unlimited -ErrorAction SilentlyContinue
+        $pfOnServer.FolderPath
+    }
+    
+    if ($FolderPath.Count -gt 0) {
         $pfOnServer = $pfOnServer | Where-Object { $FolderPath -icontains "\$($_.FolderPath)" }
     }
+    
     if ($pfOnServer -eq $null) { continue }
     $publicFolderList += New-Object PSObject -Property @{"ComputerName" = $server; "PublicFolderStats" = $pfOnServer}
     $pfOnServer | Foreach-Object { if ($nameList -inotcontains $_.FolderPath) { $nameList += $_.FolderPath } }
@@ -176,16 +194,23 @@ if ($nameList.Count -eq 0)
 
 $nameList = [array]$nameList | Sort-Object
 [array]$ResultMatrix = @()
+
 foreach($folder in $nameList)
 { 
     $resultItem = @{}
     $maxBytes = 0
     $maxSize = $null
     $maxItems = 0
+    $srvCount = 1
     foreach($pfServer in $publicFolderList)
-    { 
+    {
+        $activity = "3: Checking Public Folder Status"
+        $status = "Working on server $($pfServer.ComputerName)"
+        
+        Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$publicFolderList.Count)*100) 
+        
         $pfData = $pfServer.PublicFolderStats | Where-Object { $_.FolderPath -eq $folder }
-        if ($pfData -eq $null) { Write-Verbose "Skipping $pfServer.CompuerName for $folder"; continue }
+        if ($pfData -eq $null) { Write-Verbose "Skipping $pfServer.ComputerName for $folder"; continue }
         if (-not $resultItem.ContainsKey("FolderPath"))
         {
             $resultItem.Add("FolderPath", "\$($pfData.FolderPath)")
@@ -211,6 +236,8 @@ foreach($folder in $nameList)
             $maxBytes = $currentSize.ToBytes()
         }
         $resultItem.Data += New-Object PSObject -Property @{"ComputerName" = $pfServer.ComputerName;"TotalItemSize" = $currentSize; "ItemCount" = $currentItems}
+        
+        $srvCount++
     }
     $resultItem.Add("TotalItemSize", $maxSize)
     $resultItem.Add("TotalBytes", $maxBytes)
@@ -287,19 +314,19 @@ $serverList = @()
 $publicFolderList | ForEach-Object { $serverList += $_.ComputerName }
 $serverList -join ", "
 )</td></tr>
-<tr><td>Number of Public Folders</td><td>$($TotalCount = $ResultMatrix.Count; $TotalCount)</td></tr>
+<tr><td>Number of Public Folders</td><td>$($TotalCount = $ResultMatrix.Count; $TotalCount.ToString("N0"))</td></tr>
 <tr><td>Total Size of Public Folders</td><td>$(
-$totalSize = $null
-$ResultMatrix | Foreach-Object { $totalSize += $_.TotalItemSize }
-$totalSize
+$totalSize = $null;
+$ResultMatrix | Foreach-Object { $totalSize += $_.TotalItemSize };
+$totalSize.ToString("N0")
 )</td></tr>
-<tr><td>Average Folder Size</td><td>$($totalSize / $TotalCount)</td></tr>
+<tr><td>Average Folder Size</td><td>$(($totalSize / $TotalCount))</td></tr>
 <tr><td>Total Number of Items in Public Folders</td><td>$(
 $totalItemCount = $null
 $ResultMatrix | Foreach-Object { $totalItemCount += $_.ItemCount }
 $totalItemCount
 )</td></tr>
-<tr><td>Average Folder Item Count</td><td>$([Math]::Round($totalItemCount / $TotalCount, 0))</td></tr>
+<tr><td>Average Folder Item Count</td><td>$(([Math]::Round($totalItemCount / $TotalCount, 0)).ToString("N0"))</td></tr>
 </table>
 <br />
 <table border="0" cellpadding="3">
@@ -313,7 +340,7 @@ if (-not $incompleteItems.Count -gt 0)
 } else {
     foreach($result in $incompleteItems)
     {
-        "<tr><td>$($result.FolderPath)</td><td>$($result.ItemCount)</td><td>$($result.TotalItemSize)</td><td>$(($result.Data | Where-Object { $_.Progress -lt 100 }).ComputerName -join ", ")</td></tr>`r`n"
+        "<tr><td>$($result.FolderPath)</td><td>$($result.ItemCount.ToString("N0"))</td><td>$($result.TotalItemSize.ToString("N0"))</td><td>$(($result.Data | Where-Object { $_.Progress -lt 100 }).ComputerName -join ", ")</td></tr>`r`n"
     }
 }
 )
