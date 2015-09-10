@@ -119,7 +119,7 @@ if ($SendEmail)
 if (-not $ComputerName.Count -gt 0)
 {
     [array]$ComputerName = @()
-    Get-ExchangeServer | Where-Object { $_.ServerRole -ilike "*Mailbox*" } | % { $ComputerName += $_.Name }
+    Get-ExchangeServer | Where-Object { ($_.ServerRole -ilike "*Mailbox*") -and ($_.IsE15OrLater -eq $false) } | % { $ComputerName += $_.Name }
 }
 
 # Build a list of public folders to retrieve
@@ -164,11 +164,11 @@ foreach($server in $ComputerName)
         
     Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
 
-    $FileName = "$($DateStamp)-PF-Stats-$($server).xml"
-    $File = Join-Path -Path $ScriptDir -ChildPath $FileName
+    $FileNameXml = "$($DateStamp)-PF-Stats-$($server).xml"
+    $File = Join-Path -Path $ScriptDir -ChildPath $FileNameXml
     
     if(Test-Path -Path $File) {
-        Write-Progress -Activity $activity -Status "Load stats file $($FileName)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
+        Write-Progress -Activity $activity -Status "Loading stats file $($FileNameXml)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
         $pfOnServer = Import-CliXml -Path $File
     }
     else {
@@ -182,6 +182,7 @@ foreach($server in $ComputerName)
     }
     
     if ($pfOnServer -eq $null) { continue }
+    
     $publicFolderList += New-Object PSObject -Property @{"ComputerName" = $server; "PublicFolderStats" = $pfOnServer}
     $pfOnServer | Foreach-Object { if ($nameList -inotcontains $_.FolderPath) { $nameList += $_.FolderPath } }
     $srvCount++
@@ -316,15 +317,15 @@ $serverList -join ", "
 )</td></tr>
 <tr><td>Number of Public Folders</td><td>$($TotalCount = $ResultMatrix.Count; $TotalCount.ToString("N0"))</td></tr>
 <tr><td>Total Size of Public Folders</td><td>$(
-$totalSize = $null;
-$ResultMatrix | Foreach-Object { $totalSize += $_.TotalItemSize };
-$totalSize.ToString("N0")
+$totalSize = $null
+$ResultMatrix | Foreach-Object { $totalSize += $_.TotalItemSize }
+$totalSize.ToString().Replace(".",",")
 )</td></tr>
-<tr><td>Average Folder Size</td><td>$(($totalSize / $TotalCount))</td></tr>
+<tr><td>Average Folder Size</td><td>$(($totalSize / $TotalCount).ToString().Replace(".",","))</td></tr>
 <tr><td>Total Number of Items in Public Folders</td><td>$(
 $totalItemCount = $null
 $ResultMatrix | Foreach-Object { $totalItemCount += $_.ItemCount }
-$totalItemCount
+$totalItemCount.ToString().Replace(".",",")
 )</td></tr>
 <tr><td>Average Folder Item Count</td><td>$(([Math]::Round($totalItemCount / $TotalCount, 0)).ToString("N0"))</td></tr>
 </table>
@@ -340,7 +341,7 @@ if (-not $incompleteItems.Count -gt 0)
 } else {
     foreach($result in $incompleteItems)
     {
-        "<tr><td>$($result.FolderPath)</td><td>$($result.ItemCount.ToString("N0"))</td><td>$($result.TotalItemSize.ToString("N0"))</td><td>$(($result.Data | Where-Object { $_.Progress -lt 100 }).ComputerName -join ", ")</td></tr>`r`n"
+        "<tr><td>$($result.FolderPath)</td><td>$($result.ItemCount)</td><td>$($result.TotalItemSize)</td><td>$(($result.Data | Where-Object { $_.Progress -lt 100 }).ComputerName -join ", ")</td></tr>`r`n"
     }
 }
 )
@@ -350,7 +351,7 @@ if (-not $incompleteItems.Count -gt 0)
 <tr style="background-color:#B0B0B0"><th colspan="3">Largest Public Folders</th></tr>
 <tr style="background-color:#E9E9E9;font-weight:bold"><td>Folder Path</td><td>Item Count</td><td>Size</td></tr>
 $(
-[array]$largestItems = $ResultMatrix | Sort-Object TotalItemSize -Descending | Select-Object -First 10
+[array]$largestItems = $ResultMatrix | Sort-Object TotalItemSize -Descending | Select-Object -First 20
 if (-not $largestItems.Count -gt 0)
 {
     "<tr><td colspan='3'>There are no public folders in this report.</td></tr>"
