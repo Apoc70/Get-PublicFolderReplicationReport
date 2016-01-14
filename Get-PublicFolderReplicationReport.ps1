@@ -17,10 +17,12 @@
     Requirements 
     - Windows Server 2008 R2 SP1  
     - Exchange Server 2010
+    - Exchange Server 2007 (shows sizes as Byte only)
 
     Revision History 
     -------------------------------------------------------------------------------- 
     1.0     Initial community release of the updated version 
+    1.1     Replica status (green/red) depending on item count, not percentage
 
     .PARAMETER ComputerName
     This parameter specifies the Exchange 2010 server(s) to scan. If this is omitted, all Exchange servers with the Mailbox role in the current domain are scanned.
@@ -391,7 +393,7 @@ foreach($rItem in $ResultMatrix)
         {
             "<td>N/A</td>"
         } else {
-            if ($rDataItem.Progress -ne 100)
+            if ($rDataItem.ItemCount -ne $rItem.ItemCount) # 2016-01-14 TST changed to compare ItemCount and not percentage
             {
                 $color = "#FC2222"
             } else {
