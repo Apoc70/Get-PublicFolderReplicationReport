@@ -1,14 +1,21 @@
 <#
     .SYNOPSIS
-    Generates a report for Exchange 2010 Public Folder Replication.
+    Generates a report for Exchange 2010 (Exchange 2007) Public Folder Replication.
     
     This is an updated version of the Mike Walker (blog.mikewalker.me) to support non-ASCII environments.
 
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE 
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
     
+    Version 1.2, 2016-01-15
+
+    Ideas, comments and suggestions to support@granikos.eu 
+    
     .LINK
     Original Version of the script by Mike Walker: https://gallery.technet.microsoft.com/office/Exchange-2010-Public-944df6ee
+    
+    .LINK  
+    More information can be found at http://www.granikos.eu/en/scripts
 
     .DESCRIPTION
     This script will generate a report for Exchange 2010 Public Folder Replication. It returns general information, such as total number of public folders, total items in all public folders, total size of all items, the top 10 largest folders, and more. Additionally, it lists each Public Folder and the replication status on each server. By default, this script will scan the entire Exchange environment in the current domain and all public folders. This can be limited by using the -ComputerName and -FolderPath parameters.
@@ -17,12 +24,13 @@
     Requirements 
     - Windows Server 2008 R2 SP1  
     - Exchange Server 2010
-    - Exchange Server 2007 (shows sizes as Byte only)
+    - Exchange Server 2007 (returns sizes as Byte only)
 
     Revision History 
     -------------------------------------------------------------------------------- 
     1.0     Initial community release of the updated version 
     1.1     Replica status (green/red) depending on item count, not percentage
+    1.2     Fixed: If 1st server has a lower item count a folder is not being added to the list of folders with incomplete replication 
 
     .PARAMETER ComputerName
     This parameter specifies the Exchange 2010 server(s) to scan. If this is omitted, all Exchange servers with the Mailbox role in the current domain are scanned.
@@ -63,7 +71,7 @@ param(
     [string[]]$FolderPath = @(),
     [switch]$Recurse,
     [switch]$AsHTML,
-    [string]$Filename,
+    [string]$Filename="Report.html",
     [switch]$SendEmail,
     [string[]]$To,
     [string]$From,
@@ -79,11 +87,11 @@ $ScriptDir = Split-Path $script:MyInvocation.MyCommand.Path
 
 $DateStamp = Get-Date -Format "yyyy-MM-dd"
 
-
+$skip = $true
 # Validate parameters
-if ($SendEmail)
+if ($SendEmail -and (!$skip))
 {
-    Write-Verbose "Checking SendEmail requirements"
+    # Write-Verbose "Checking SendEmail requirements"
     
     [array]$newTo = @()
     foreach($recipient in $To)
@@ -175,7 +183,7 @@ foreach($server in $ComputerName)
     }
     else {
         Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
-        $pfOnServer = Get-PublicFolderStatistics -Server $server -ResultSize Unlimited -ErrorAction SilentlyContinue
+        $pfOnServer = Get-PublicFolderStatistics -Server $server -ErrorAction SilentlyContinue #-ResultSize Unlimited 
         $pfOnServer.FolderPath
     }
     
@@ -195,19 +203,25 @@ if ($nameList.Count -eq 0)
     return
 }
 
+$nameListMax = $nameList.Count
+$nameCount = 1
 $nameList = [array]$nameList | Sort-Object
 [array]$ResultMatrix = @()
 
+# Check each public folder
 foreach($folder in $nameList)
 { 
     $resultItem = @{}
     $maxBytes = 0
     $maxSize = $null
     $maxItems = 0
+    $minItems = 0 # 2016-01-15 added, folder incomplete replication fix
     $srvCount = 1
+    
+    # Check each public folder server in list
     foreach($pfServer in $publicFolderList)
     {
-        $activity = "3: Checking Public Folder Status"
+        $activity = "3: Checking Public Folder Status ($($nameCount)/$($nameListMax))"
         $status = "Working on server $($pfServer.ComputerName)"
         
         Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$publicFolderList.Count)*100) 
@@ -233,6 +247,12 @@ foreach($folder in $nameList)
         {
             $maxItems = $currentItems
         }
+        # 2016-01-15 added, folder incomplete replication fix
+        if (($currentItems -lt $maxItems) -or ($srvCount -eq 1))
+        {
+            $minItems = $currentItems
+        }
+        
         if ($currentSize.ToBytes() -gt $maxBytes)
         {
             $maxSize = $currentSize
@@ -242,10 +262,12 @@ foreach($folder in $nameList)
         
         $srvCount++
     }
+    
     $resultItem.Add("TotalItemSize", $maxSize)
     $resultItem.Add("TotalBytes", $maxBytes)
     $resultItem.Add("ItemCount", $maxItems)
     $replCheck = $true
+    
     foreach($dataRecord in $resultItem.Data)
     {
         if ($maxItems -eq 0)
@@ -254,7 +276,7 @@ foreach($folder in $nameList)
         } else {
             $progress = ([Math]::Round($dataRecord.ItemCount / $maxItems * 100, 0))
         }
-        if ($progress -lt 100)
+        if (($progress -lt 100) -or ($minItems -ne $maxItems))
         {
             $replCheck = $false
         }
@@ -267,6 +289,7 @@ foreach($folder in $nameList)
         New-Object PSObject -Property $resultItem
         
     }
+    $nameCount++
 }
 
 # TST 2015-05-26 : measure script execution
@@ -275,6 +298,11 @@ $elapsedTime = [String]::Format("{0:00}:{1:00}:{2:00}",$stopWatch.Elapsed.Hours,
 
 if ($AsHTML -or $SendEmail -or $Filename -ne $null)
 {
+    $activity = "Working..."
+    $status = "Generating HTML Report"
+        
+    Write-Progress -Activity $activity -Status $status -PercentComplete 100
+        
     $html = @"
 <html>
 <style>
@@ -321,7 +349,7 @@ $serverList -join ", "
 <tr><td>Total Size of Public Folders</td><td>$(
 $totalSize = $null
 $ResultMatrix | Foreach-Object { $totalSize += $_.TotalItemSize }
-$totalSize.ToString().Replace(".",",")
+$totalSize.ToString()
 )</td></tr>
 <tr><td>Average Folder Size</td><td>$(($totalSize / $TotalCount).ToString().Replace(".",","))</td></tr>
 <tr><td>Total Number of Items in Public Folders</td><td>$(
@@ -393,13 +421,13 @@ foreach($rItem in $ResultMatrix)
         {
             "<td>N/A</td>"
         } else {
-            if ($rDataItem.ItemCount -ne $rItem.ItemCount) # 2016-01-14 TST changed to compare ItemCount and not percentage
+            if ($rDataItem.ItemCount -ne $rItem.ItemCount) #$rDataItem.Progress -ne 100
             {
                 $color = "#FC2222"
             } else {
                 $color = "#A9FFB5"
             }
-            "<td style='background-color:$($color)'><div title='$($rDataItem.TotalItemSize) of $($rItem.TotalItemSize) and $($rDataItem.ItemCount) of $($rItem.ItemCount) items.'>$($rDataItem.Progress)%</div></td>"
+            "<td style='background-color:$($color)'><div title='$($rDataItem.TotalItemSize) of $($rItem.TotalItemSize) and $($rDataItem.ItemCount) of $($rItem.ItemCount) items.'>$($rDataItem.Progress)% [$($rDataItem.ItemCount)]</div></td>"
         }
         )
     }
