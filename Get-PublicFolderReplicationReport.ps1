@@ -32,6 +32,7 @@
     1.1 Replica status (green/red) depending on item count, not percentage
     1.2 Fixed: If 1st server has a lower item count a folder is not being added to the list of folders with incomplete replication 
     1.3 Changes to number and size formatting, Exchange 2007 now returns MB or GB, as configured   
+    1.4 Handling of KB values with Exchange 2007 added
 
     .PARAMETER ComputerName
     This parameter specifies the legacy Exchange server(s) to scan. If this is omitted, all Exchange servers with the Mailbox role in the current domain are scanned.
@@ -91,25 +92,31 @@ $ConvertTo = 'MB' # 'MB', 'GB' !!! Exchange 2007 Only
 
 # TST 2016-05-26 : Convert byte value to MB/GB using the locale settings
 function Convert-Value {
-   param
-   (
-     [string]
-     $value
-   )
+  param (
+    [string]$value
+  )
 
-    if(((Get-Command exsetup |%{$_.Fileversioninfo}).ProductVersion).StartsWith('08')) {
-        # additional calulations for Exchange 2007
+  if(((Get-Command exsetup |%{$_.Fileversioninfo}).ProductVersion).StartsWith('08')) {
+      # additional calulations for Exchange 2007
+      if($value.EndsWith('KB')) {
+        # separated each step, instead of a fancy one-liner
+        $value = $value.Replace('KB','')
+        $value2 = ([int]$value) * 1KB
+        $value = [string]$value2
+      }
+      elseif($value.EndsWith('B')){ 
         $value = $value.Replace('B','')
-        if($value -eq '') {$value = '0'}
-        switch($ConvertTo) {
-            'MB' { $returnValue = "$([math]::round([long]$value/1MB, 2).ToString('n',$culture)) $($ConvertTo)" }
-            default { $returnValue = "$([math]::round([long]$value/1GB, 2).ToString('n',$culture)) $($ConvertTo)" }
-        }
-    } else {
-        # keep as default for Exchange 2010
-        $returnValue = $value
-    }
-    return $returnValue
+      }
+      if($value -eq '') {$value = '0'}
+      switch($ConvertTo) {
+          'MB' { $returnValue = "$([math]::round([long]$value/1MB, 2).ToString('n',$culture)) $($ConvertTo)" }
+          default { $returnValue = "$([math]::round([long]$value/1GB, 2).ToString('n',$culture)) $($ConvertTo)" }
+      }
+  } else {
+      # keep as default for Exchange 2010
+      $returnValue = $value
+  }
+  return $returnValue
 }
 
 $skip = $true
