@@ -7,7 +7,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE 
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
     
-    Version 1.3, 2016-05-26
+    Version 1.4, 2016-07-25
 
     Ideas, comments and suggestions to support@granikos.eu 
     
@@ -67,6 +67,8 @@
     .PARAMETER NoAttachment
     When SendEmail is used, specifying this switch will set the email report to not include the HTML Report as an attachment. It will still be sent in the body of the email.
 
+    .EXAMPLE
+    .\Get-PublicFolderReplicationReport.ps1 -ComputerName MXSRV01,MXSRV02,MXSRV03 -FolderPath "\MYPUBLICFOLDER" -Recurse -Subject "Public Folder Environment Report" -AsHTML -To postmaster@varunagroup.de -From postmaster@varunagroup.de -SmtpServer relay.mcsmemail.de -SendEmail
 #>
 param(
     [string[]]$ComputerName = @(),
