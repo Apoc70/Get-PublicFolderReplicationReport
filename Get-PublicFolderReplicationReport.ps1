@@ -7,7 +7,7 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE 
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
     
-    Version 1.4, 2017-02-07
+    Version 1.5, 2017-02-07
 
     Ideas, comments and suggestions to support@granikos.eu 
     
@@ -33,8 +33,9 @@
     1.0 Initial community release of the updated version 
     1.1 Replica status (green/red) depending on item count, not percentage
     1.2 Fixed: If 1st server has a lower item count a folder is not being added to the list of folders with incomplete replication 
-    1.3 Changes to number and size formatting    
-    1.4 Some PowerShelll hygiene and fixes
+    1.3 Changes to number and size formatting  
+    1.4 Handling of KB values with Exchange 2007 added 
+    1.5 Some PowerShelll hygiene and fixes
 
     .PARAMETER ComputerName
     This parameter specifies the legacy Exchange server(s) to scan. If this is omitted, all Exchange servers with the Mailbox role in the current domain are scanned.
@@ -85,7 +86,7 @@ param(
 )
 
 # TST 2015-05-26 : measure script execution
-$stopWatch = [system.diagnostics.stopwatch]::startNew() 
+$stopWatch = [diagnostics.stopwatch]::startNew() 
 
 $ScriptDir = Split-Path -Path $script:MyInvocation.MyCommand.Path
 $DateStamp = Get-Date -Format 'yyyy-MM-dd'
