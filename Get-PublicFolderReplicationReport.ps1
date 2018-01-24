@@ -7,15 +7,14 @@
     THIS CODE IS MADE AVAILABLE AS IS, WITHOUT WARRANTY OF ANY KIND. THE ENTIRE 
     RISK OF THE USE OR THE RESULTS FROM THE USE OF THIS CODE REMAINS WITH THE USER.
     
-    Version 1.5, 2017-02-07
+    Version 1.6, 2018-01-24
 
     Ideas, comments and suggestions to support@granikos.eu 
     
-    .LINK
     Original Version of the script by Mike Walker: https://gallery.technet.microsoft.com/office/Exchange-2010-Public-944df6ee
     
     .LINK  
-    More information can be found at http://scripts.granikos.eu
+    http://scripts.granikos.eu
 
     .DESCRIPTION
     This script will generate a report for legacy public folder replication. It returns general information, such as total number of public folders, total items in all public folders, total size of all items, the top 10 largest folders, and more. 
@@ -36,6 +35,7 @@
     1.3 Changes to number and size formatting  
     1.4 Handling of KB values with Exchange 2007 added 
     1.5 Some PowerShelll hygiene and fixes
+    1.6 Count of incomplete replicated public folders stated in table header (issue #1)
 
     .PARAMETER ComputerName
     This parameter specifies the legacy Exchange server(s) to scan. If this is omitted, all Exchange servers with the Mailbox role in the current domain are scanned.
@@ -71,6 +71,7 @@
     When SendEmail is used, specifying this switch will set the email report to not include the HTML Report as an attachment. It will still be sent in the body of the email.
 
 #>
+[CmdletBinding()]
 param(
     [string[]]$ComputerName = @(),
     [string[]]$FolderPath = @(),
@@ -204,7 +205,7 @@ foreach($server in $ComputerName) {
     }
     else {
         Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
-        $pfOnServer = Get-PublicFolderStatistics -Server $server -ErrorAction SilentlyContinue #-ResultSize Unlimited 
+        $pfOnServer = Get-PublicFolderStatistics -Server $server -ErrorAction SilentlyContinue -ResultSize Unlimited 
         $pfOnServer.FolderPath
     }
     
@@ -382,10 +383,11 @@ $totalItemCount.ToString('N0', $culture)
 </table>
 <br />
 <table border="0" cellpadding="3">
-<tr style="background-color:#B0B0B0"><th colspan="4">Folders with Incomplete Replication</th></tr>
-<tr style="background-color:#E9E9E9;font-weight:bold"><td>Folder Path</td><td>Item Count</td><td>Size</td><td>Servers with Replication Incomplete</td></tr>
+
 $(
 [array]$incompleteItems = $ResultMatrix | Where-Object { $_.ReplicationComplete -eq $false }
+"<tr style='background-color:#B0B0B0'><th colspan='4'>Folders with Incomplete Replication ($($incompleteItems.Count))</th></tr>
+<tr style='background-color:#E9E9E9;font-weight:bold'><td>Folder Path</td><td>Item Count</td><td>Size</td><td>Servers with Replication Incomplete</td></tr>"
 if (-not $incompleteItems.Count -gt 0) {
     "<tr><td colspan='4'>There are no public folders with incomplete replication.</td></tr>"
 } else {
