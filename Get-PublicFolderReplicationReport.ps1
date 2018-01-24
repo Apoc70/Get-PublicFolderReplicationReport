@@ -73,17 +73,17 @@
 #>
 [CmdletBinding()]
 param(
-    [string[]]$ComputerName = @(),
-    [string[]]$FolderPath = @(),
-    [switch]$Recurse,
-    [switch]$AsHTML,
-    [string]$Filename='Report.html',
-    [switch]$SendEmail,
-    [string[]]$To,
-    [string]$From,
-    [string]$SmtpServer,
-    [string]$Subject,
-    [switch]$NoAttachment
+  [string[]]$ComputerName = @(),
+  [string[]]$FolderPath = @(),
+  [switch]$Recurse,
+  [switch]$AsHTML,
+  [string]$Filename='Report.html',
+  [switch]$SendEmail,
+  [string[]]$To,
+  [string]$From,
+  [string]$SmtpServer,
+  [string]$Subject,
+  [switch]$NoAttachment
 )
 
 # TST 2015-05-26 : measure script execution
@@ -95,87 +95,94 @@ $culture = New-Object -TypeName System.Globalization.CultureInfo -ArgumentList (
 $ConvertTo = 'MB' # 'MB', 'GB' !!! Exchange 2007 Only
 
 # TST 2016-05-26 : Convert byte value to MB/GB using the locale settings
-function Convert-Value([string]$value) {
-    if(((Get-Command -Name exsetup |%{$_.Fileversioninfo}).ProductVersion).StartsWith('08')) {
-        # additional calulations for Exchange 2007
-        if($value.EndsWith('KB')) {
-            # separated each step, instead of a one-liner
-            $value = $value.Replace('KB','')
-            $vv = ([int]$value) * 1KB
-            $value = [string]$vv
-        }
-        elseif($value.EndsWith('B')) {
-            $value = $value.Replace('B','')
-        }
-        if($value -eq '') {$value = '0'}
-        switch($ConvertTo) {
-          # Return MB        
-          'MB' { $returnValue = "$([math]::round([long]$value/1MB, 2).ToString('n',$culture)) $($ConvertTo)" }
-          # Return GB by default
-          default { $returnValue = "$([math]::round([long]$value/1GB, 2).ToString('n',$culture)) $($ConvertTo)" }
-        }
-    } else {
-        # keep as default for Exchange 2010
-        $returnValue = $value
+function Convert-Value {
+  [CmdletBinding()]
+  param
+  (
+    [string]
+    $value
+  )
+
+  if(((Get-Command -Name exsetup |ForEach-Object {$_.Fileversioninfo}).ProductVersion).StartsWith('08')) {
+    # additional calulations for Exchange 2007
+    if($value.EndsWith('KB')) {
+      # separated each step, instead of a one-liner
+      $value = $value.Replace('KB','')
+      $vv = ([int]$value) * 1KB
+      $value = [string]$vv
     }
-    return $returnValue
+    elseif($value.EndsWith('B')) {
+      $value = $value.Replace('B','')
+    }
+    if($value -eq '') {$value = '0'}
+    switch($ConvertTo) {
+      # Return MB        
+      'MB' { $returnValue = "$([math]::round([long]$value/1MB, 2).ToString('n',$culture)) $($ConvertTo)" }
+      # Return GB by default
+      default { $returnValue = "$([math]::round([long]$value/1GB, 2).ToString('n',$culture)) $($ConvertTo)" }
+    }
+  } else {
+    # keep as default for Exchange 2010
+    $returnValue = $value
+  }
+  return $returnValue
 }
 
 $skip = $true
 # Validate parameters
 if ($SendEmail -and (!$skip)) {
-    # Write-Verbose "Checking SendEmail requirements"
+  # Write-Verbose "Checking SendEmail requirements"
     
-    [array]$newTo = @()
-    foreach($recipient in $To) {
-        if ($recipient -imatch "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z0-9.-]+$") {
-            $newTo += $recipient
-        }
+  [array]$newTo = @()
+  foreach($recipient in $To) {
+    if ($recipient -imatch "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z0-9.-]+$") {
+      $newTo += $recipient
     }
-    $To = $newTo
-    if (-not $To.Count -gt 0) {
-        Write-Error -Message 'The -To parameter is required when using the -SendEmail switch. If this parameter was used, verify that valid email addresses were specified.'
-        return
-    }
+  }
+  $To = $newTo
+  if (-not $To.Count -gt 0) {
+    Write-Error -Message 'The -To parameter is required when using the -SendEmail switch. If this parameter was used, verify that valid email addresses were specified.'
+    return
+  }
     
-    if ($From -inotmatch "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z0-9.-]+$") {
-        Write-Error -Message 'The -From parameter is not valid. This parameter is required when using the -SendEmail switch.'
-        return
-    }
+  if ($From -inotmatch "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z0-9.-]+$") {
+    Write-Error -Message 'The -From parameter is not valid. This parameter is required when using the -SendEmail switch.'
+    return
+  }
 
-    if ([string]::IsNullOrEmpty($SmtpServer)) {
-        Write-Error -Message 'You must specify a SmtpServer. This parameter is required when using the -SendEmail switch.'
-        return
-    }
-    if ((Test-Connection -ComputerName $SmtpServer -Quiet -Count 2) -ne $true) {
-        Write-Error -Message "The SMTP server specified ($SmtpServer) could not be contacted."
-        return
-    }
+  if ([string]::IsNullOrEmpty($SmtpServer)) {
+    Write-Error -Message 'You must specify a SmtpServer. This parameter is required when using the -SendEmail switch.'
+    return
+  }
+  if ((Test-Connection -ComputerName $SmtpServer -Quiet -Count 2) -ne $true) {
+    Write-Error -Message "The SMTP server specified ($SmtpServer) could not be contacted."
+    return
+  }
 }
 
 if (-not $ComputerName.Count -gt 0) {
-    [array]$ComputerName = @()
-    Get-ExchangeServer | Where-Object { ($_.ServerRole -ilike '*Mailbox*') } | % { $ComputerName += $_.Name } #-and ($_.IsE15OrLater -eq $false)
+  [array]$ComputerName = @()
+  Get-ExchangeServer | Where-Object { ($_.ServerRole -ilike '*Mailbox*') } | ForEach-Object { $ComputerName += $_.Name } #-and ($_.IsE15OrLater -eq $false)
 }
 
 # Build a list of public folders to retrieve
 if ($Recurse)
 {
-    Write-Verbose -Message 'Fetching public folder list'
+  Write-Verbose -Message 'Fetching public folder list'
     
-    [array]$newFolderPath = @()
-    $srvCount = 1
-    foreach($srv in $ComputerName) {
+  [array]$newFolderPath = @()
+  $srvCount = 1
+  foreach($srv in $ComputerName) {
         
-        Write-Progress -Activity '1: Fetching Public Folder Data' -Status "Working on server $($srv)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
+    Write-Progress -Activity '1: Fetching Public Folder Data' -Status "Working on server $($srv)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
         
-        foreach($f in $FolderPath) {
-            # ResultSize Unlimited added
-            Get-PublicFolder $f -Recurse -ResultSize Unlimited | ForEach-Object { if ($newFolderPath -inotcontains $_.Identity) { $newFolderPath += $_.Identity } }
-        }
-        $srvCount++
+    foreach($f in $FolderPath) {
+      # ResultSize Unlimited added
+      Get-PublicFolder $f -Recurse -ResultSize Unlimited | ForEach-Object { if ($newFolderPath -inotcontains $_.Identity) { $newFolderPath += $_.Identity } }
     }
-    $FolderPath = $newFolderPath
+    $srvCount++
+  }
+  $FolderPath = $newFolderPath
 }
 
 Write-Verbose -Message "Fetching public folder statistics"
@@ -187,42 +194,42 @@ Write-Verbose -Message "Fetching public folder statistics"
 $pfCount = 1
 $srvCount = 1
 foreach($server in $ComputerName) { 
-    $pfOnServer = $null
+  $pfOnServer = $null
     
-    $server = $server.ToUpper()
+  $server = $server.ToUpper()
 
-    $activity = '2: Fetching full public folder statistics'
-    $status = "Working on server $($server)"
+  $activity = '2: Fetching full public folder statistics'
+  $status = "Working on server $($server)"
         
-    Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
+  Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
 
-    $FileNameXml = "$($DateStamp)-PF-Stats-$($server).xml"
-    $File = Join-Path -Path $ScriptDir -ChildPath $FileNameXml
+  $FileNameXml = "$($DateStamp)-PF-Stats-$($server).xml"
+  $File = Join-Path -Path $ScriptDir -ChildPath $FileNameXml
     
-    if(Test-Path -Path $File) {
-        Write-Progress -Activity $activity -Status "Loading stats file $($FileNameXml)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
-        $pfOnServer = Import-CliXml -Path $File
-    }
-    else {
-        Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
-        $pfOnServer = Get-PublicFolderStatistics -Server $server -ErrorAction SilentlyContinue -ResultSize Unlimited 
-        $pfOnServer.FolderPath
-    }
+  if(Test-Path -Path $File) {
+    Write-Progress -Activity $activity -Status "Loading stats file $($FileNameXml)" -PercentComplete (($srvCount/$ComputerName.Count)*100)
+    $pfOnServer = Import-CliXml -Path $File
+  }
+  else {
+    Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$ComputerName.Count)*100)
+    $pfOnServer = Get-PublicFolderStatistics -Server $server -ErrorAction SilentlyContinue -ResultSize Unlimited 
+    $pfOnServer.FolderPath
+  }
     
-    if ($FolderPath.Count -gt 0) {
-        $pfOnServer = $pfOnServer | Where-Object { $FolderPath -icontains "\$($_.FolderPath)" }
-    }
+  if ($FolderPath.Count -gt 0) {
+    $pfOnServer = $pfOnServer | Where-Object { $FolderPath -icontains "\$($_.FolderPath)" }
+  }
     
-    if ($pfOnServer -eq $null) { continue }
+  if ($pfOnServer -eq $null) { continue }
     
-    $publicFolderList += New-Object -TypeName PSObject -Property @{"ComputerName" = $server; "PublicFolderStats" = $pfOnServer}
-    $pfOnServer | Foreach-Object { if ($nameList -inotcontains $_.FolderPath) { $nameList += $_.FolderPath } }
-    $srvCount++
+  $publicFolderList += New-Object -TypeName PSObject -Property @{"ComputerName" = $server; "PublicFolderStats" = $pfOnServer}
+  $pfOnServer | Foreach-Object { if ($nameList -inotcontains $_.FolderPath) { $nameList += $_.FolderPath } }
+  $srvCount++
 }
 if ($nameList.Count -eq 0)
 {
-    Write-Error -Message "There are no public folders in the specified servers."
-    return
+  Write-Error -Message "There are no public folders in the specified servers."
+  return
 }
 
 $nameListMax = $nameList.Count
@@ -233,85 +240,85 @@ $nameList = [array]$nameList | Sort-Object
 # Check each public folder
 foreach($folder in $nameList)
 { 
-    $resultItem = @{}
-    $maxBytes = 0
-    $maxSize = $null
-    $maxItems = 0
-    $minItems = 0 # 2016-01-15 added, folder incomplete replication fix
-    $srvCount = 1
+  $resultItem = @{}
+  $maxBytes = 0
+  $maxSize = $null
+  $maxItems = 0
+  $minItems = 0 # 2016-01-15 added, folder incomplete replication fix
+  $srvCount = 1
     
-    # Check each public folder server in list
-    foreach($pfServer in $publicFolderList)
+  # Check each public folder server in list
+  foreach($pfServer in $publicFolderList)
+  {
+    # 2016-05-25, reordered to display folder name in activity message
+    $pfData = $pfServer.PublicFolderStats | Where-Object { $_.FolderPath -eq $folder }
+    if ($pfData -eq $null) { 
+      Write-Verbose -Message "Skipping $pfServer.ComputerName for $folder"; continue 
+    }
+        
+    $activity = "3: Checking Public Folder Status ($($nameCount)/$($nameListMax)) [\$($pfData.FolderPath)]"
+    $status = "Working on server $($pfServer.ComputerName)"
+        
+    Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$publicFolderList.Count)*100) 
+        
+    if (-not $resultItem.ContainsKey("FolderPath"))
     {
-        # 2016-05-25, reordered to display folder name in activity message
-        $pfData = $pfServer.PublicFolderStats | Where-Object { $_.FolderPath -eq $folder }
-        if ($pfData -eq $null) { 
-          Write-Verbose -Message "Skipping $pfServer.ComputerName for $folder"; continue 
-        }
-        
-        $activity = "3: Checking Public Folder Status ($($nameCount)/$($nameListMax)) [\$($pfData.FolderPath)]"
-        $status = "Working on server $($pfServer.ComputerName)"
-        
-        Write-Progress -Activity $activity -Status $status -PercentComplete (($srvCount/$publicFolderList.Count)*100) 
-        
-        if (-not $resultItem.ContainsKey("FolderPath"))
-        {
-            $resultItem.Add("FolderPath", "\$($pfData.FolderPath)")
-        }
-        if (-not $resultItem.ContainsKey("Name"))
-        {
-            $resultItem.Add("Name", $pfData.Name)
-        }
-        if ($resultItem.Data -eq $null)
-        {
-            $resultItem.Data = @()
-        }
-        $currentItems = $pfData.ItemCount
-        $currentSize = $pfData.TotalItemSize.Value
-        
-        if ($currentItems -gt $maxItems)
-        {
-            $maxItems = $currentItems
-        }
-        # 2016-01-15 added, folder incomplete replication fix
-        if (($currentItems -lt $maxItems) -or ($srvCount -eq 1)) {
-            $minItems = $currentItems
-        }
-        
-        if ($currentSize.ToBytes() -gt $maxBytes) {
-            $maxSize = $currentSize
-            $maxBytes = $currentSize.ToBytes()
-        }
-        $resultItem.Data += New-Object -TypeName PSObject -Property @{
-          "ComputerName" = $pfServer.ComputerName
-          "TotalItemSize" = $currentSize
-          "ItemCount" = $currentItems}
-        
-        $srvCount++
+      $resultItem.Add("FolderPath", "\$($pfData.FolderPath)")
     }
+    if (-not $resultItem.ContainsKey("Name"))
+    {
+      $resultItem.Add("Name", $pfData.Name)
+    }
+    if ($resultItem.Data -eq $null)
+    {
+      $resultItem.Data = @()
+    }
+    $currentItems = $pfData.ItemCount
+    $currentSize = $pfData.TotalItemSize.Value
+        
+    if ($currentItems -gt $maxItems)
+    {
+      $maxItems = $currentItems
+    }
+    # 2016-01-15 added, folder incomplete replication fix
+    if (($currentItems -lt $maxItems) -or ($srvCount -eq 1)) {
+      $minItems = $currentItems
+    }
+        
+    if ($currentSize.ToBytes() -gt $maxBytes) {
+      $maxSize = $currentSize
+      $maxBytes = $currentSize.ToBytes()
+    }
+    $resultItem.Data += New-Object -TypeName PSObject -Property @{
+      "ComputerName" = $pfServer.ComputerName
+      "TotalItemSize" = $currentSize
+    "ItemCount" = $currentItems}
+        
+    $srvCount++
+  }
     
-    $resultItem.Add("TotalItemSize", $maxSize)
-    $resultItem.Add("TotalBytes", $maxBytes)
-    $resultItem.Add("ItemCount", $maxItems)
-    $replCheck = $true
+  $resultItem.Add("TotalItemSize", $maxSize)
+  $resultItem.Add("TotalBytes", $maxBytes)
+  $resultItem.Add("ItemCount", $maxItems)
+  $replCheck = $true
     
-    foreach($dataRecord in $resultItem.Data) {
-        if ($maxItems -eq 0) {
-            $progress = 100
-        } else {
-            $progress = ([Math]::Round($dataRecord.ItemCount / $maxItems * 100, 0))
-        }
-        if (($progress -lt 100) -or ($minItems -ne $maxItems)) {
-            $replCheck = $false
-        }
-        $dataRecord | Add-Member -MemberType NoteProperty -Name "Progress" -Value $progress
+  foreach($dataRecord in $resultItem.Data) {
+    if ($maxItems -eq 0) {
+      $progress = 100
+    } else {
+      $progress = ([Math]::Round($dataRecord.ItemCount / $maxItems * 100, 0))
     }
-    $resultItem.Add("ReplicationComplete", $replCheck)
-    $ResultMatrix += New-Object -TypeName PSObject -Property $resultItem
-    if (-not $AsHTML) {
-        New-Object -TypeName PSObject -Property $resultItem
+    if (($progress -lt 100) -or ($minItems -ne $maxItems)) {
+      $replCheck = $false
     }
-    $nameCount++
+    $dataRecord | Add-Member -MemberType NoteProperty -Name "Progress" -Value $progress
+  }
+  $resultItem.Add("ReplicationComplete", $replCheck)
+  $ResultMatrix += New-Object -TypeName PSObject -Property $resultItem
+  if (-not $AsHTML) {
+    New-Object -TypeName PSObject -Property $resultItem
+  }
+  $nameCount++
 }
 
 # TST 2015-05-26 : measure script execution
@@ -319,13 +326,13 @@ $stopWatch.Stop()
 $elapsedTime = [String]::Format("{0:00}:{1:00}:{2:00}",$stopWatch.Elapsed.Hours,$stopWatch.Elapsed.Minutes,$stopWatch.Elapsed.Seconds)
 
 if ($AsHTML -or $SendEmail -or $Filename -ne $null) {
-    $activity = "Working..."
-    $status = "Generating HTML Report"
+  $activity = "Working..."
+  $status = "Generating HTML Report"
         
-    Write-Progress -Activity $activity -Status $status -PercentComplete 100
+  Write-Progress -Activity $activity -Status $status -PercentComplete 100
       
-    # Html style    
-    $html = @"
+  # Html style    
+  $html = @"
 <html>
 <style>
 body
@@ -427,8 +434,7 @@ foreach($rServer in $publicFolderList)
 )
 </tr>
 $(
-if (-not $ResultMatrix.Count -gt 0)
-{
+if (-not $ResultMatrix.Count -gt 0) {
     "<tr><td colspan='$($publicFolderList.Count + 1)'>There are no public folders in this report.</td></tr>"
 }
 foreach($rItem in $ResultMatrix)
@@ -460,34 +466,34 @@ foreach($rItem in $ResultMatrix)
 }
 
 if ($AsHTML) {
-    $html
+  $html
 }
 
 if (-not [string]::IsNullOrEmpty($Filename)) {
-    # TST 2015-05-26 : support UTF8 encoding
-    $html | Out-File -FilePath $Filename -Encoding UTF8
+  # TST 2015-05-26 : support UTF8 encoding
+  $html | Out-File -FilePath $Filename -Encoding UTF8
 }
 
 # TST 2015-05-26 : support UTF8 encoding for Send-MailMessage bug
 $utf8 = New-Object -TypeName System.Text.utf8encoding
 
 if ($SendEmail) {
-    if ([string]::IsNullOrEmpty($Subject)) {
-        $Subject = "Public Folder Environment Report"
-    }
-    if ($NoAttachment) {
-        # TST 2015-05-26 : support UTF8 encoding for Send-MailMessage
-        Send-MailMessage -SmtpServer $SmtpServer -BodyAsHtml -Body $html -From $From -To $To -Subject $Subject -Encoding $utf8
+  if ([string]::IsNullOrEmpty($Subject)) {
+    $Subject = "Public Folder Environment Report"
+  }
+  if ($NoAttachment) {
+    # TST 2015-05-26 : support UTF8 encoding for Send-MailMessage
+    Send-MailMessage -SmtpServer $SmtpServer -BodyAsHtml -Body $html -From $From -To $To -Subject $Subject -Encoding $utf8
         
+  } else {
+    if (-not [string]::IsNullOrEmpty($Filename)) {
+      $attachment = $Filename
     } else {
-        if (-not [string]::IsNullOrEmpty($Filename)) {
-            $attachment = $Filename
-        } else {
-            $attachment = "$($Env:TEMP)\Public Folder Report - $([DateTime]::Now.ToString("MM-dd-yy")).html"
-            $html | Out-File -FilePath $attachment -Encoding UTF8
-        }
-        # TST 2015-05-26 : support UTF8 encoding for Send-MailMessage
-        Send-MailMessage -SmtpServer $SmtpServer -BodyAsHtml -Body $html -From $From -To $To -Subject $Subject -Attachments $attachment -Encoding $utf8
-        Remove-Item -Path $attachment -Confirm:$false -Force
+      $attachment = "$($Env:TEMP)\Public Folder Report - $([DateTime]::Now.ToString("MM-dd-yy")).html"
+      $html | Out-File -FilePath $attachment -Encoding UTF8
     }
+    # TST 2015-05-26 : support UTF8 encoding for Send-MailMessage
+    Send-MailMessage -SmtpServer $SmtpServer -BodyAsHtml -Body $html -From $From -To $To -Subject $Subject -Attachments $attachment -Encoding $utf8
+    Remove-Item -Path $attachment -Confirm:$false -Force
+  }
 }
